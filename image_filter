@@ -1,0 +1,228 @@
+package com.mycompany.imagefilterapp;
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import javax.imageio.ImageIO;
+
+public class ImageFilterApp extends JFrame {
+
+    private BufferedImage originalImage;
+    private BufferedImage glitchImage;
+    private BufferedImage filterImage;
+
+    private JLabel leftLabel = new JLabel("Pixel Glitch Effect", JLabel.CENTER);
+    private JLabel rightLabel = new JLabel("Multi-Color Filter", JLabel.CENTER);
+
+    private JButton uploadButton = new JButton("Upload Image");
+    private JButton stepButton = new JButton("Step");
+    private JButton startStopButton = new JButton("Start");
+
+    private JLabel statusLabel = new JLabel("Ready", JLabel.CENTER);
+    private JProgressBar progressBar = new JProgressBar();
+
+    private Timer animationTimer;
+    private int colorShift = 0;
+
+    public ImageFilterApp() {
+        setTitle("Image Processing Demo - Java");
+        setSize(1100, 650);
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setLocationRelativeTo(null);
+        setLayout(new BorderLayout());
+
+        // ===== Image Panel =====
+        JPanel imagePanel = new JPanel(new GridLayout(1, 2, 20, 20));
+        imagePanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+
+        styleImageLabel(leftLabel);
+        styleImageLabel(rightLabel);
+
+        imagePanel.add(leftLabel);
+        imagePanel.add(rightLabel);
+
+        // ===== Buttons =====
+        JPanel buttonPanel = new JPanel();
+        buttonPanel.add(uploadButton);
+        buttonPanel.add(stepButton);
+        buttonPanel.add(startStopButton);
+
+        // ===== Bottom Panel =====
+        JPanel bottomPanel = new JPanel(new BorderLayout());
+        progressBar.setIndeterminate(true);
+        progressBar.setVisible(false);
+
+        bottomPanel.add(progressBar, BorderLayout.NORTH);
+        bottomPanel.add(buttonPanel, BorderLayout.CENTER);
+        bottomPanel.add(statusLabel, BorderLayout.SOUTH);
+
+        add(imagePanel, BorderLayout.CENTER);
+        add(bottomPanel, BorderLayout.SOUTH);
+
+        // ===== Actions =====
+        uploadButton.addActionListener(e -> loadImage());
+        stepButton.addActionListener(e -> applyPixelGlitch());
+        startStopButton.addActionListener(e -> toggleAnimation());
+
+        animationTimer = new Timer(200, e -> applyColorFilter());
+
+        setVisible(true);
+    }
+
+    // ===== UI Style =====
+    private void styleImageLabel(JLabel label) {
+        label.setOpaque(true);
+        label.setBackground(new Color(30, 30, 30));
+        label.setForeground(Color.WHITE);
+        label.setBorder(BorderFactory.createLineBorder(Color.GRAY));
+    }
+
+    // ===== Loading UI =====
+    private void showLoading(String msg) {
+        progressBar.setVisible(true);
+        statusLabel.setText(msg);
+    }
+
+    private void hideLoading(String msg) {
+        progressBar.setVisible(false);
+        statusLabel.setText(msg);
+    }
+
+    // ===== Load Image =====
+    private void loadImage() {
+        JFileChooser chooser = new JFileChooser();
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
+
+        SwingWorker<Void, Void> worker = new SwingWorker<>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                showLoading("Please wait... Loading image");
+                Thread.sleep(1200); // Ensure loading is visible
+
+                BufferedImage img = ImageIO.read(chooser.getSelectedFile());
+                img = resizeIfLarge(img);
+
+                originalImage = img;
+                glitchImage = copy(img);
+                filterImage = copy(img);
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                leftLabel.setIcon(new ImageIcon(glitchImage));
+                rightLabel.setIcon(new ImageIcon(filterImage));
+                hideLoading("Image loaded successfully");
+            }
+        };
+        worker.execute();
+    }
+
+    // ===== Resize Large Images =====
+    private BufferedImage resizeIfLarge(BufferedImage img) {
+        int max = 900;
+        if (img.getWidth() <= max && img.getHeight() <= max) return img;
+
+        Image scaled = img.getScaledInstance(max, -1, Image.SCALE_SMOOTH);
+        BufferedImage resized = new BufferedImage(
+                scaled.getWidth(null),
+                scaled.getHeight(null),
+                BufferedImage.TYPE_INT_RGB
+        );
+
+        Graphics2D g = resized.createGraphics();
+        g.drawImage(scaled, 0, 0, null);
+        g.dispose();
+        return resized;
+    }
+
+    // ===== Copy Image =====
+    private BufferedImage copy(BufferedImage img) {
+        BufferedImage c = new BufferedImage(img.getWidth(), img.getHeight(), img.getType());
+        Graphics g = c.getGraphics();
+        g.drawImage(img, 0, 0, null);
+        g.dispose();
+        return c;
+    }
+
+    // ===== Pixel Glitch (STEP) =====
+    private void applyPixelGlitch() {
+        if (glitchImage == null) return;
+
+        SwingWorker<Void, Void> worker = new SwingWorker<>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                showLoading("Processing image... Applying pixel glitch");
+                Thread.sleep(800);
+
+                int w = glitchImage.getWidth();
+                int h = glitchImage.getHeight();
+                BufferedImage temp = copy(glitchImage);
+
+                int block = 6;
+                int shift = 15;
+
+                for (int y = 0; y < h; y += block) {
+                    int offset = (int) (Math.random() * shift * 2 - shift);
+                    for (int x = 0; x < w; x++) {
+                        int nx = x + offset;
+                        if (nx >= 0 && nx < w) {
+                            for (int dy = 0; dy < block && y + dy < h; dy++) {
+                                glitchImage.setRGB(nx, y + dy, temp.getRGB(x, y + dy));
+                            }
+                        }
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                leftLabel.setIcon(new ImageIcon(glitchImage));
+                hideLoading("Pixel glitch applied successfully");
+            }
+        };
+        worker.execute();
+    }
+
+    // ===== Multi-Color Filter Animation =====
+    private void applyColorFilter() {
+        if (filterImage == null) return;
+
+        int w = filterImage.getWidth();
+        int h = filterImage.getHeight();
+
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                Color c = new Color(filterImage.getRGB(x, y));
+                int r = (c.getRed() + colorShift) % 256;
+                int g = (c.getGreen() + colorShift * 2) % 256;
+                int b = (c.getBlue() + colorShift * 3) % 256;
+                filterImage.setRGB(x, y, new Color(r, g, b).getRGB());
+            }
+        }
+
+        colorShift = (colorShift + 1) % 256;
+        rightLabel.setIcon(new ImageIcon(filterImage));
+    }
+
+    // ===== Start / Stop Toggle =====
+    private void toggleAnimation() {
+        if (filterImage == null) return;
+
+        if (!animationTimer.isRunning()) {
+            animationTimer.start();
+            startStopButton.setText("Stop");
+            statusLabel.setText("Color filter animation is running...");
+        } else {
+            animationTimer.stop();
+            startStopButton.setText("Start");
+            statusLabel.setText("Animation stopped");
+        }
+    }
+
+    // ===== Main =====
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(ImageFilterApp::new);
+    }
+}
